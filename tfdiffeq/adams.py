@@ -45,9 +45,9 @@ def g_and_explicit_phi(prev_t, next_t, implicit_phi, k):
     beta = tf.cast(beta, next_t.dtype)
     for j in range(1, k):
         beta = (next_t - prev_t[j - 1]) / (curr_t - prev_t[j]) * beta
-        beat_cast = move_to_device(beta, implicit_phi[j][0].device)
-        beat_cast = tf.cast(beat_cast, implicit_phi[0][0].dtype)
-        explicit_phi.append(tuple(iphi_ * beat_cast for iphi_ in implicit_phi[j]))
+        beta_cast = move_to_device(beta, implicit_phi[j][0].device)
+        beta_cast = tf.cast(beta_cast, implicit_phi[0][0].dtype)
+        explicit_phi.append(tuple(iphi_ * beta_cast for iphi_ in implicit_phi[j]))
 
         c = c[:-1] - c[1:] if j == 1 else c[:-1] - c[1:] * dt / (next_t - prev_t[j - 1])
         # tf.assign(g[j], tf.cast(c[0], g[j].dtype))
@@ -137,10 +137,8 @@ class VariableCoefficientAdamsBashforth(AdaptiveStepsizeODESolver):
 
         # Explicit predictor step.
         g, phi = g_and_explicit_phi(prev_t, next_t, prev_phi, order)
-        # g = move_to_device(g, y0[0].device)
 
         g = tf.cast(g, dt_cast.dtype)
-        phi = [tf.cast(phi_, dt_cast.dtype) for phi_ in phi]
 
         p_next = tuple(
             y0_ + _scaled_dot_product(dt_cast, g[:max(1, order - 1)], phi_[:max(1, order - 1)])
@@ -149,7 +147,7 @@ class VariableCoefficientAdamsBashforth(AdaptiveStepsizeODESolver):
 
         # Update phi to implicit.
         next_t = move_to_device(next_t, p_next[0].device)
-        next_f0 = self.func(next_t, p_next)
+        next_f0 = self.func(tf.cast(next_t, self.y0[0].dtype), p_next)
         implicit_phi_p = compute_implicit_phi(phi, next_f0, order + 1)
 
         # Implicit corrector step.
@@ -175,16 +173,13 @@ class VariableCoefficientAdamsBashforth(AdaptiveStepsizeODESolver):
 
         # We accept the step. Evaluate f and update phi.
         next_t = move_to_device(next_t, p_next[0].device)
-        next_f0 = self.func(next_t, y_next)
+        next_f0 = self.func(tf.cast(next_t, self.y0[0].dtype), y_next)
         implicit_phi = compute_implicit_phi(phi, next_f0, order + 2)
-
         next_order = order
 
         if len(prev_t) <= 4 or order < 3:
             next_order = min(order + 1, 3, self.max_order)
         else:
-            implicit_phi_p = [tf.cast(iphi_, dt_cast.dtype) for iphi_ in implicit_phi_p]
-
             error_km1 = _compute_error_ratio(
                 tuple(dt_cast * (g[order - 1] - g[order - 2]) * iphi_
                       for iphi_ in implicit_phi_p[order - 1]),
