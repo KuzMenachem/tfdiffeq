@@ -30,13 +30,13 @@ def OdeintAdjointMethod(*args):
     atol = _arguments.atol
 
     y0, t = args[:-1], args[-1]
-   
+
     # registers `t` as a Variable that needs a grad, then resets it to a Tensor
     # for the `odeint` function to work. This is done to force tf to allow us to
     # pass the gradient of t as output.
     # t = tf.get_variable('t', initializer=t)
     # t = tf.convert_to_tensor(t, dtype=t.dtype)
-    
+
     ans = odeint(func, y0, t, rtol=rtol, atol=atol, method=method, options=options)
 
     def grad(*grad_output, variables=None):
@@ -56,9 +56,9 @@ def OdeintAdjointMethod(*args):
         def augmented_dynamics(t, y_aug):
             # Dynamics of the original system augmented with
             # the adjoint wrt y, and an integrator wrt t and args.
-           
+
             y, adj_y = y_aug[:n_tensors], y_aug[n_tensors:2 * n_tensors]  # Ignore adj_time and adj_params.
-           
+
             with tf.GradientTape() as tape:
                 tape.watch(t)
                 tape.watch(y)
@@ -132,7 +132,7 @@ def OdeintAdjointMethod(*args):
                 tf.convert_to_tensor([t[i], t[i - 1]]),
                 rtol=rtol, atol=atol, method=method, options=options
             )
-            
+
             # Unpack aug_ans.
             adj_y = aug_ans[n_tensors:2 * n_tensors]
             adj_time = aug_ans[2 * n_tensors]
